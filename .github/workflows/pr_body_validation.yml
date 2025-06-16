@@ -1,0 +1,45 @@
+name: Pull Request Body Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  checks: write
+  pull-requests: write
+
+jobs:
+  check-pr-body:
+    runs-on: ubuntu-latest
+    outputs:
+      body_check_failed: ${{ steps.regex.outputs.match }}
+    steps:
+      - name: Check if the PR body contains 'Closes #'
+        id: regex
+        uses: actions-ecosystem/action-regex-match@v2
+        with:
+          text: ${{ github.event.pull_request.body }}
+          regex: 'Closes #[0-9]+'
+
+      - name: Comment on PR, if body check fails
+        if: steps.regex.outputs.match == ''
+        uses: actions/github-script@v5
+        with:
+          script: |
+            const issueComment = `Hello @${{ github.actor }} 👋, \
+            \n\nIt looks like your PR description is missing 'Closes #'. \
+            \nPlease include the phrase 'Closes #issue_ID' to indicate which issue this PR closes.`;
+            github.rest.issues.createComment({
+              issue_number: ${{ github.event.pull_request.number }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: issueComment
+            });
+            
+      - name: Fail workflow if PR description is missing Closes #
+        if: steps.regex.outputs.match == ''
+        run: |
+          echo "Failing the workflow because PR description is missing Closes #."
+          exit 1
